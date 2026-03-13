@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Vacuum Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <!-- For parsing ANSI colors in the terminal emulator -->
+    <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js"></script>
+</head>
+
+<body>
+    <div class="background-animation">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <main class="container">
+        <header class="dashboard-header">
+            <h1>Data Vacuum</h1>
+            <p>Web Data Harvester → ML-Ready Dataset</p>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Configuration Panel -->
+            <section class="glass-panel config-panel">
+                <h2>Pipeline Configuration</h2>
+                <form id="vacuum-form">
+                    <div class="input-group">
+                        <label for="prompt">Research Prompt</label>
+                        <textarea id="prompt" name="prompt" rows="3"
+                            placeholder="e.g. Find negative reviews of IoT hardware"
+                            required>Find negative reviews of IoT hardware</textarea>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="labels">Classification Labels</label>
+                        <input type="text" id="labels" name="labels" value="Positive,Negative,Neutral"
+                            placeholder="Comma-separated labels" required>
+                    </div>
+
+                    <div class="row-group">
+                        <div class="input-group">
+                            <label for="max-queries">Max Queries</label>
+                            <input type="number" id="max-queries" name="max-queries" value="5" min="1" max="50"
+                                required>
+                        </div>
+                        <div class="input-group checkbox-group">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="include-comments" name="include-comments" checked>
+                                <span class="checkmark"></span>
+                                Include Comments
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="run-btn" class="primary-btn">
+                        <span class="btn-text">Launch Pipeline</span>
+                        <div class="spinner hidden"></div>
+                    </button>
+                </form>
+
+                <div id="download-section" class="hidden">
+                    <h3>Dataset Ready!</h3>
+                    <div class="download-buttons">
+                        <a id="download-csv" href="#" class="btn secondary-btn" download>Download CSV</a>
+                        <a id="download-parquet" href="#" class="btn secondary-btn" download>Download Parquet</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Terminal Output Panel -->
+            <section class="glass-panel terminal-panel">
+                <div class="terminal-header">
+                    <div class="window-controls">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span>Live Output</span>
+                </div>
+                <div class="terminal-body" id="terminal-output">
+                    <div class="placeholder-text">Awaiting pipeline launch...</div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
