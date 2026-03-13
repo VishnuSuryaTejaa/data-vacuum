@@ -25,6 +25,13 @@ WORKDIR /app
 ENV HOME=/tmp
 ENV HF_HOME=/tmp/hf_cache
 
+# Limit CPU parallelism to the 2 vCPUs available on free HF Space tier
+# Without these, PyTorch/OpenMP/MKL spawn ~32 threads and thrash the CPU
+ENV OMP_NUM_THREADS=2
+ENV MKL_NUM_THREADS=2
+ENV TOKENIZERS_PARALLELISM=false
+ENV NUMEXPR_NUM_THREADS=2
+
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 

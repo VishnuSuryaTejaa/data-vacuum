@@ -59,22 +59,28 @@ class Classifier:
 
         base_path = _ONNX_CACHE_DIR / "model.onnx"
 
+        # Constrain ONNX Runtime threads to match HF Space's 2 vCPU
+        session_options = ort.SessionOptions()
+        session_options.intra_op_num_threads = 2
+        session_options.inter_op_num_threads = 2
+
         if base_path.exists():
             console.print("  [green]✓[/] Loading cached ONNX model")
             model = ORTModelForSequenceClassification.from_pretrained(
                 _ONNX_CACHE_DIR,
                 file_name="model.onnx",
+                session_options=session_options,
             )
         else:
             console.print("  [yellow]⏳[/] First run: exporting PyTorch → ONNX "
                           "(takes ~1-2 min, cached permanently after)...")
             _ONNX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            # Use optimum's built-in export which handles opset and file layout correctly.
-            # With torch==2.1.2 this uses the legacy (non-dynamo) exporter at opset 12.
+            # With torch==2.1.2 this uses the legacy (non-dynamo) exporter at opset 12
             model = ORTModelForSequenceClassification.from_pretrained(
                 config.HF_MODEL,
                 export=True,
                 provider="CPUExecutionProvider",
+                session_options=session_options,
             )
             model.save_pretrained(_ONNX_CACHE_DIR)
             tokenizer.save_pretrained(_ONNX_CACHE_DIR)
@@ -86,6 +92,7 @@ class Classifier:
             tokenizer=tokenizer,
         )
         console.print("  [green]✓[/] ONNX pipeline ready")
+
 
 
 
