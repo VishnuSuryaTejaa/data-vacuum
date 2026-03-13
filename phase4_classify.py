@@ -120,9 +120,14 @@ class Classifier:
             console.print("  [yellow]ℹ[/] Using CPU (recommended for DeBERTa on Mac)")
             device = "cpu"
 
+        tokenizer = AutoTokenizer.from_pretrained(config.HF_MODEL)
+        # Explicitly cap to 512 tokens to suppress the truncation warning
+        tokenizer.model_max_length = 512
+
         self._pipe = pipeline(
             "zero-shot-classification",
             model=config.HF_MODEL,
+            tokenizer=tokenizer,
             device=device,
             torch_dtype=torch.float32,
         )
