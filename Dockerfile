@@ -21,6 +21,10 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
+# HF Spaces sandboxes the app dir as read-only; write everything to /tmp
+ENV HOME=/tmp
+ENV HF_HOME=/tmp/hf_cache
+
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
@@ -34,9 +38,10 @@ RUN playwright install-deps chromium
 # Copy the rest of the application
 COPY . .
 
-# Expose the port the app runs on
-EXPOSE 8000
+# Create writable output dir in /tmp at runtime
+RUN mkdir -p /tmp/output
 
-# Command to run the application
-# Use pythonunbuffered to ensure logs are streamed directly
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# HF Spaces uses port 7860
+EXPOSE 7860
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

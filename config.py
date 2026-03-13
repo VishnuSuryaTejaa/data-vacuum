@@ -51,5 +51,5 @@ CONFIDENCE_THRESHOLD_DEFAULT = 0.85              # Fallback for unlisted labels
 # ── Phase 5: Export ──────────────────────────────────────────────────────────
 PARQUET_ENGINE = "pyarrow"
 PARQUET_COMPRESSION = "snappy"
-DEFAULT_OUTPUT_DIR = "output"
+DEFAULT_OUTPUT_DIR = "/tmp/output"
 DEFAULT_OUTPUT_FILE = "training_dataset.parquet"

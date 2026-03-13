@@ -128,4 +128,4 @@ async def download_file(exec_id: str, type: str = "csv"):
     return FileResponse(path=file_path, filename=filename, media_type=media_type)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=7860)
