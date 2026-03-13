@@ -49,65 +49,45 @@ class Classifier:
     # ── Model loading ────────────────────────────────────────────────────
 
     def _load_onnx(self):
-        """Load or export the model with ONNX Runtime (no quantization)."""
+        """Export (first run) or load (subsequent runs) the model with ONNX Runtime."""
         console.print("  [bright_cyan]⚡ ONNX Runtime[/] engine selected")
 
         tokenizer = AutoTokenizer.from_pretrained(config.HF_MODEL)
-        
+        tokenizer.model_max_length = 512
+
         # DeBERTa ONNX models often don't expect token_type_ids
         if "token_type_ids" in tokenizer.model_input_names:
             tokenizer.model_input_names.remove("token_type_ids")
 
         base_path = _ONNX_CACHE_DIR / "model.onnx"
 
-        if (_ONNX_CACHE_DIR / "model_quantized.onnx").exists():
-            console.print(f"  [green]✓[/] Loading cached quantized ONNX model")
-        elif base_path.exists():
-            console.print(f"  [green]✓[/] Loading cached unquantized ONNX model (fallback)")
+        if base_path.exists():
+            console.print("  [green]✓[/] Loading cached ONNX model")
         else:
-            import tempfile
             from optimum.exporters.onnx import main_export
-            # main_export() accepts opset directly — works with optimum <=1.20
-            # opset=18 matches PyTorch 2.x native output, avoiding LayerNorm downgrade crash
             console.print("  [yellow]⏳[/] First run: exporting PyTorch → ONNX "
                           "(takes ~1-2 min, cached permanently after)...")
             _ONNX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            # Export directly into the persistent cache dir so .onnx and .onnx.data
+            # files are always co-located and never lost when a tempdir is cleaned up
+            main_export(
+                model_name_or_path=config.HF_MODEL,
+                output=_ONNX_CACHE_DIR,
+                task="zero-shot-classification",
+                opset=18,
+                no_post_process=True,
+            )
+            tokenizer.save_pretrained(_ONNX_CACHE_DIR)
+            console.print("  [green]✓[/] ONNX model exported and cached")
 
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                tmp_path = Path(tmp_dir)
-
-                # Export to temp dir so .onnx + .onnx.data both land there
-                main_export(
-                    model_name_or_path=config.HF_MODEL,
-                    output=tmp_path,
-                    task="zero-shot-classification",
-                    opset=18,
-                    no_post_process=True,
-                )
-                tokenizer.save_pretrained(_ONNX_CACHE_DIR)
-
-                # Apply dynamic INT8 quantization for ~3x CPU inference speedup
-                console.print("  [yellow]⏳[/] Quantizing ONNX model (INT8) for CPU...")
-                quantizer = ORTQuantizer.from_pretrained(tmp_path, file_name="model.onnx")
-
-                if platform.machine().lower() in ("arm64", "aarch64"):
-                    qconfig = AutoQuantizationConfig.arm64(is_static=False, per_channel=True)
-                else:
-                    qconfig = AutoQuantizationConfig.avx2(is_static=False, per_channel=True)
-
-                quantizer.quantize(save_dir=_ONNX_CACHE_DIR, quantization_config=qconfig)
-
-            console.print("  [green]✓[/] ONNX model quantized and cached")
-
-        # Constrain thread spawns to stop CPU thrashing on t3.small EC2 (2 vCPU)
+        # Constrain thread spawns to avoid CPU thrashing on t3.small (2 vCPU)
         session_options = ort.SessionOptions()
         session_options.intra_op_num_threads = 2
         session_options.inter_op_num_threads = 2
 
-        file_name = "model_quantized.onnx" if (_ONNX_CACHE_DIR / "model_quantized.onnx").exists() else "model.onnx"
         model = ORTModelForSequenceClassification.from_pretrained(
             _ONNX_CACHE_DIR,
-            file_name=file_name,
+            file_name="model.onnx",
             session_options=session_options,
         )
 
