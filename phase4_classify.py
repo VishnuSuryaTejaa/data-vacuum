@@ -66,21 +66,24 @@ class Classifier:
             console.print(f"  [green]✓[/] Loading cached unquantized ONNX model (fallback)")
         else:
             import tempfile
-            # Export PyTorch → ONNX with opset 18 (matches what PyTorch 2.x natively produces)
-            # Avoid opset 12 target which lacks LayerNormalization
+            from optimum.exporters.onnx import main_export
+            # main_export() accepts opset directly — works with optimum <=1.20
+            # opset=18 matches PyTorch 2.x native output, avoiding LayerNorm downgrade crash
             console.print("  [yellow]⏳[/] First run: exporting PyTorch → ONNX "
-                          "(takes ~1-2 min on first run, cached permanently after)...")
+                          "(takes ~1-2 min, cached permanently after)...")
             _ONNX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tmp_path = Path(tmp_dir)
-                # Export to the temp directory so external data (.onnx.data) lands there
-                export_model = ORTModelForSequenceClassification.from_pretrained(
-                    config.HF_MODEL,
-                    export=True,
+
+                # Export to temp dir so .onnx + .onnx.data both land there
+                main_export(
+                    model_name_or_path=config.HF_MODEL,
+                    output=tmp_path,
+                    task="zero-shot-classification",
                     opset=18,
+                    no_post_process=True,
                 )
-                export_model.save_pretrained(tmp_path)
                 tokenizer.save_pretrained(_ONNX_CACHE_DIR)
 
                 # Apply dynamic INT8 quantization for ~3x CPU inference speedup
