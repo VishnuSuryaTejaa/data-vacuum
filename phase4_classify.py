@@ -23,10 +23,8 @@ console = Console()
 # ── ONNX availability probe ─────────────────────────────────────────────────
 _USE_ONNX = False
 try:
-    from optimum.onnxruntime import ORTModelForSequenceClassification, ORTQuantizer
-    from optimum.onnxruntime.configuration import AutoQuantizationConfig
+    from optimum.onnxruntime import ORTModelForSequenceClassification
     import onnxruntime as ort
-    import platform
     _USE_ONNX = True
 except ImportError:
     pass
@@ -63,33 +61,24 @@ class Classifier:
 
         if base_path.exists():
             console.print("  [green]✓[/] Loading cached ONNX model")
+            model = ORTModelForSequenceClassification.from_pretrained(
+                _ONNX_CACHE_DIR,
+                file_name="model.onnx",
+            )
         else:
-            from optimum.exporters.onnx import main_export
             console.print("  [yellow]⏳[/] First run: exporting PyTorch → ONNX "
                           "(takes ~1-2 min, cached permanently after)...")
             _ONNX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            # Export directly into the persistent cache dir so .onnx and .onnx.data
-            # files are always co-located and never lost when a tempdir is cleaned up
-            main_export(
-                model_name_or_path=config.HF_MODEL,
-                output=_ONNX_CACHE_DIR,
-                task="zero-shot-classification",
-                opset=18,
-                no_post_process=True,
+            # Use optimum's built-in export which handles opset and file layout correctly.
+            # With torch==2.1.2 this uses the legacy (non-dynamo) exporter at opset 12.
+            model = ORTModelForSequenceClassification.from_pretrained(
+                config.HF_MODEL,
+                export=True,
+                provider="CPUExecutionProvider",
             )
+            model.save_pretrained(_ONNX_CACHE_DIR)
             tokenizer.save_pretrained(_ONNX_CACHE_DIR)
             console.print("  [green]✓[/] ONNX model exported and cached")
-
-        # Constrain thread spawns to avoid CPU thrashing on t3.small (2 vCPU)
-        session_options = ort.SessionOptions()
-        session_options.intra_op_num_threads = 2
-        session_options.inter_op_num_threads = 2
-
-        model = ORTModelForSequenceClassification.from_pretrained(
-            _ONNX_CACHE_DIR,
-            file_name="model.onnx",
-            session_options=session_options,
-        )
 
         self._pipe = pipeline(
             "zero-shot-classification",
@@ -97,6 +86,7 @@ class Classifier:
             tokenizer=tokenizer,
         )
         console.print("  [green]✓[/] ONNX pipeline ready")
+
 
 
     def _load_pytorch(self):
