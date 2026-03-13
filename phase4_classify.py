@@ -65,28 +65,36 @@ class Classifier:
         elif base_path.exists():
             console.print(f"  [green]✓[/] Loading cached unquantized ONNX model (fallback)")
         else:
-            # Export PyTorch → ONNX
+            import tempfile
+            # Export PyTorch → ONNX with opset 18 (matches what PyTorch 2.x natively produces)
+            # Avoid opset 12 target which lacks LayerNormalization
             console.print("  [yellow]⏳[/] First run: exporting PyTorch → ONNX "
-                          "(takes ~30-60 s, cached for future runs)…")
+                          "(takes ~1-2 min on first run, cached permanently after)...")
             _ONNX_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            model = ORTModelForSequenceClassification.from_pretrained(
-                config.HF_MODEL,
-                export=True,
-            )
-            model.save_pretrained(_ONNX_CACHE_DIR)
-            tokenizer.save_pretrained(_ONNX_CACHE_DIR)
-            
-            # Apply dynamic quantization to shrink model by 4x and speed up CPU inference by 2x
-            console.print("  [yellow]⏳[/] Quantizing ONNX model for CPU (INT8)…")
-            quantizer = ORTQuantizer.from_pretrained(_ONNX_CACHE_DIR, file_name="model.onnx")
-            
-            if platform.machine().lower() in ("arm64", "aarch64"):
-                qconfig = AutoQuantizationConfig.arm64(is_static=False, per_channel=True)
-            else:
-                qconfig = AutoQuantizationConfig.avx2(is_static=False, per_channel=True)
-                
-            quantizer.quantize(save_dir=_ONNX_CACHE_DIR, quantization_config=qconfig)
-            console.print("  [green]✓[/] ONNX model quantized and cached for future runs")
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                tmp_path = Path(tmp_dir)
+                # Export to the temp directory so external data (.onnx.data) lands there
+                export_model = ORTModelForSequenceClassification.from_pretrained(
+                    config.HF_MODEL,
+                    export=True,
+                    opset=18,
+                )
+                export_model.save_pretrained(tmp_path)
+                tokenizer.save_pretrained(_ONNX_CACHE_DIR)
+
+                # Apply dynamic INT8 quantization for ~3x CPU inference speedup
+                console.print("  [yellow]⏳[/] Quantizing ONNX model (INT8) for CPU...")
+                quantizer = ORTQuantizer.from_pretrained(tmp_path, file_name="model.onnx")
+
+                if platform.machine().lower() in ("arm64", "aarch64"):
+                    qconfig = AutoQuantizationConfig.arm64(is_static=False, per_channel=True)
+                else:
+                    qconfig = AutoQuantizationConfig.avx2(is_static=False, per_channel=True)
+
+                quantizer.quantize(save_dir=_ONNX_CACHE_DIR, quantization_config=qconfig)
+
+            console.print("  [green]✓[/] ONNX model quantized and cached")
 
         # Constrain thread spawns to stop CPU thrashing on t3.small EC2 (2 vCPU)
         session_options = ort.SessionOptions()
