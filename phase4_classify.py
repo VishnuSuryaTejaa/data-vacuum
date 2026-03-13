@@ -23,7 +23,10 @@ console = Console()
 # ── ONNX availability probe ─────────────────────────────────────────────────
 _USE_ONNX = False
 try:
-    from optimum.onnxruntime import ORTModelForSequenceClassification
+    from optimum.onnxruntime import ORTModelForSequenceClassification, ORTQuantizer
+    from optimum.onnxruntime.configuration import AutoQuantizationConfig
+    import onnxruntime as ort
+    import platform
     _USE_ONNX = True
 except ImportError:
     pass
@@ -57,12 +60,10 @@ class Classifier:
 
         base_path = _ONNX_CACHE_DIR / "model.onnx"
 
-        if base_path.exists():
-            console.print(f"  [green]✓[/] Loading cached ONNX model")
-            model = ORTModelForSequenceClassification.from_pretrained(
-                _ONNX_CACHE_DIR,
-                file_name="model.onnx",
-            )
+        if (_ONNX_CACHE_DIR / "model_quantized.onnx").exists():
+            console.print(f"  [green]✓[/] Loading cached quantized ONNX model")
+        elif base_path.exists():
+            console.print(f"  [green]✓[/] Loading cached unquantized ONNX model (fallback)")
         else:
             # Export PyTorch → ONNX
             console.print("  [yellow]⏳[/] First run: exporting PyTorch → ONNX "
@@ -74,7 +75,30 @@ class Classifier:
             )
             model.save_pretrained(_ONNX_CACHE_DIR)
             tokenizer.save_pretrained(_ONNX_CACHE_DIR)
-            console.print("  [green]✓[/] ONNX model cached for future runs")
+            
+            # Apply dynamic quantization to shrink model by 4x and speed up CPU inference by 2x
+            console.print("  [yellow]⏳[/] Quantizing ONNX model for CPU (INT8)…")
+            quantizer = ORTQuantizer.from_pretrained(_ONNX_CACHE_DIR, file_name="model.onnx")
+            
+            if platform.machine().lower() in ("arm64", "aarch64"):
+                qconfig = AutoQuantizationConfig.arm64(is_static=False, per_channel=True)
+            else:
+                qconfig = AutoQuantizationConfig.avx2(is_static=False, per_channel=True)
+                
+            quantizer.quantize(save_dir=_ONNX_CACHE_DIR, quantization_config=qconfig)
+            console.print("  [green]✓[/] ONNX model quantized and cached for future runs")
+
+        # Constrain thread spawns to stop CPU thrashing on t3.small EC2 (2 vCPU)
+        session_options = ort.SessionOptions()
+        session_options.intra_op_num_threads = 2
+        session_options.inter_op_num_threads = 2
+
+        file_name = "model_quantized.onnx" if (_ONNX_CACHE_DIR / "model_quantized.onnx").exists() else "model.onnx"
+        model = ORTModelForSequenceClassification.from_pretrained(
+            _ONNX_CACHE_DIR,
+            file_name=file_name,
+            session_options=session_options,
+        )
 
         self._pipe = pipeline(
             "zero-shot-classification",

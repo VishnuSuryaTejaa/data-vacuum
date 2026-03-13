@@ -25,7 +25,7 @@ TAVILY_RAW_CONTENT = False                   # URLs only; scraping in Phase 2
 PLAYWRIGHT_HEADLESS = True                   # Invisible browser
 PLAYWRIGHT_TIMEOUT = 15_000                  # 15 s per page (fail fast)
 PLAYWRIGHT_WAIT_UNTIL = "domcontentloaded"   # Skip images/ads
-SCRAPE_CONCURRENCY = 10                      # Parallel page limit (no proxy)
+SCRAPE_CONCURRENCY = 5                       # Parallel page limit (no proxy)
 
 # ── Phase 2: Proxy Settings (optional — activate via .env) ───────────────────
 PROXY_SERVER   = os.getenv("PROXY_SERVER", "")       # e.g. http://proxy.provider.com:8000
@@ -40,7 +40,7 @@ INCLUDE_COMMENTS_DEFAULT = False             # True for forums/reviews
 
 # ── Phase 4: Classification ──────────────────────────────────────────────────
 HF_MODEL = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
-CLASSIFY_BATCH_SIZE = 16                     # Sentences per GPU batch
+CLASSIFY_BATCH_SIZE = 8                      # Sentences per GPU batch
 CONFIDENCE_GATES = {
     "Negative": 0.85,                            # Strict — anger is easy to detect
     "Positive": 0.85,                            # Strict — spam often masquerades as positive
